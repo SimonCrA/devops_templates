@@ -1,0 +1,152 @@
+# este pipeline despliega una aplicacion de angular 
+# se ejecuta en un self-hosted runner llamado (fron-dev, front-qa, front-sandbox)
+# los secrets estan separados por entornos (Development, Quality, Sandbox)
+# ahi se deben agregar el secret (SUBMODULE_SSH_KEY)
+
+name: Construir la aplicacion de Angular, en un servidor local
+
+on:
+  pull_request:
+    branches:
+      - Development
+      - Quality
+      - Sandbox
+    types:
+      - closed
+
+jobs:
+  deploy-dev:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Development'
+    name: Desplegar a DEV
+    runs-on: [ 'front-dev' ]
+    environment: Development
+
+    steps:
+      - name: Configurar SSH y los submodulos
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SUBMODULE_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+
+      - name: Sincronizar el codigo (checkout)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.SUBMODULE_SSH_KEY }}
+
+      - name: Usar Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Instalar Angular CLI (sino esta instalado globalmente)
+        run: |
+          if ! command -v ng > /dev/null; then
+            npm install -g @angular/cli
+          fi
+
+      - name: Copiar el codigo a /srv/f-bus
+        run: |
+          rm -rf /srv/f-bus/*
+          rsync -av --exclude='.git' --exclude='.github' ./ /srv/f-bus/
+
+      - name: Instalar dependencias
+        working-directory: /srv/f-bus
+        run: npm ci
+
+      - name: Construir la aplicacion angular
+        working-directory: /srv/f-bus
+        run: npm run build:dev
+
+  deploy-qa:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Quality'
+    name: Desplegar a QA
+    runs-on: [ 'front-qa' ]
+    environment: Quality
+
+    steps:
+      - name: Configurar SSH y los submodulos
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SUBMODULE_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+
+      - name: Sincronizar el codigo (checkout)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.SUBMODULE_SSH_KEY }}
+
+      - name: Usar Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Instalar Angular CLI (sino esta instalado globalmente)
+        run: |
+          if ! command -v ng > /dev/null; then
+            npm install -g @angular/cli
+          fi
+
+      - name: Copiar el codigo a /srv/f-bus
+        run: |
+          rm -rf /srv/f-bus/*
+          rsync -av --exclude='.git' --exclude='.github' ./ /srv/f-bus/
+
+      - name: Instalar dependencias
+        working-directory: /srv/f-bus
+        run: npm ci
+
+      - name: Construir la aplicacion angular
+        working-directory: /srv/f-bus
+        run: npm run build:qa
+
+
+  deploy-sandbox:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Sandbox'
+    name: Desplegar a sandbox
+    runs-on: ['front-sandbox' ]
+    environment: Sandbox
+
+    steps:
+      - name: Configurar SSH y los submodulos
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SUBMODULE_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+
+      - name: Sincronizar el codigo (checkout)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.SUBMODULE_SSH_KEY }}
+
+      - name: Usar Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Instalar Angular CLI (sino esta instalado globalmente)
+        run: |
+          if ! command -v ng > /dev/null; then
+            npm install -g @angular/cli
+          fi
+
+      - name: Copiar el codigo a /srv/f-bus
+        run: |
+          rm -rf /srv/f-bus/*
+          rsync -av --exclude='.git' --exclude='.github' ./ /srv/f-bus/
+
+      - name: Instalar dependencias
+        working-directory: /srv/f-bus
+        run: npm ci
+
+      - name: Construir la aplicacion angular
+        working-directory: /srv/f-bus
+        run: npm run build:sandbox

@@ -1,0 +1,128 @@
+# este pipeline despliega una DB de postgreSQL con docker
+# se ejecuta en un self-hosted runner llamado (db-dev, db-qa, db-sandbox)
+# los secrets estan separados por entornos (Development, Quality, Sandbox)
+# tiene 3 secrets que son (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB)
+#
+name: Desplegar PostgrSQL al hacer merge de un PR
+
+on:
+  pull_request:
+    branches:
+      - Development
+      - Quality
+      - Sandbox
+    types:
+      - closed
+
+jobs:
+  deploy-dev:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Development'
+    runs-on: [ 'db-dev' ]
+    name: Deploy to Dev
+    environment: Development
+
+    env:
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      ENVIRONMENT: dev
+      DB_PORT: 5430
+
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "POSTGRES_USER=${POSTGRES_USER}" > .env
+          echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> .env
+          echo "ENVIRONMENT=${ENVIRONMENT}" >> .env
+          echo "DB_PORT=${DB_PORT}" >> .env
+          cat .env
+
+      - name: Parar y borrar los conenedores existentes
+        run: |
+          CONTAINER_NAME=postgres_db_${ENVIRONMENT}
+
+          if docker ps -a --format '{{.Names}}' | grep -q "^$CONTAINER_NAME$"; then
+            echo "Contenedor $CONTAINER_NAME encontrado. Eliminando..."
+            docker compose down -v
+          else
+            echo "No existe un contenedor llamado $CONTAINER_NAME. Continuando..."
+          fi 
+
+      - name: Desplegar la nueva version con docker compose
+        run: |
+          docker compose -p "postgresql_${ENVIRONMENT}" up  -d --build --remove-orphans
+
+  deploy-qa:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Quality'
+    runs-on: [ 'db-qa' ]
+    name: Deploy to QA
+    environment: Quality
+    
+    env:
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      ENVIRONMENT: qa
+      DB_PORT: 5431
+    
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "POSTGRES_USER=${POSTGRES_USER}" > .env
+          echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> .env
+          echo "ENVIRONMENT=${ENVIRONMENT}" >> .env
+          echo "DB_PORT=${DB_PORT}" >> .env
+
+      - name: Parar y borrar los conenedores existentes
+        run: |
+          CONTAINER_NAME=postgres_db_${ENVIRONMENT}
+
+          if docker ps -a --format '{{.Names}}' | grep -q "^$CONTAINER_NAME$"; then
+            echo "Contenedor $CONTAINER_NAME encontrado. Eliminando..."
+            docker compose down -v
+          else
+            echo "No existe un contenedor llamado $CONTAINER_NAME. Continuando..."
+          fi 
+
+      - name: Desplegar la nueva version con docker compose
+        run: |
+          docker compose -p "postgresql_${ENVIRONMENT}" up  -d --build --remove-orphans
+
+  deploy-sandbox:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Sandbox'
+    runs-on: [ 'db-sandbox' ]
+    name: Deploy to Sandbox
+    environment: Sandbox
+    
+    env:
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      ENVIRONMENT: sandbox
+      DB_PORT: 5432
+
+    
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "POSTGRES_USER=${POSTGRES_USER}" > .env
+          echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> .env
+          echo "ENVIRONMENT=${ENVIRONMENT}" >> .env
+          echo "DB_PORT=${DB_PORT}" >> .env
+
+      - name: Parar y borrar los conenedores existentes
+        run: |
+          CONTAINER_NAME=postgres_db_${ENVIRONMENT}
+
+          if docker ps -a --format '{{.Names}}' | grep -q "^$CONTAINER_NAME$"; then
+            echo "Contenedor $CONTAINER_NAME encontrado. Eliminando..."
+            docker compose down -v
+          else
+            echo "No existe un contenedor llamado $CONTAINER_NAME. Continuando..."
+          fi 
+
+      - name: Desplegar la nueva version con docker compose.
+        run: |
+          docker compose -p "postgresql_${ENVIRONMENT}" up  -d --build --remove-orphans
+

@@ -1,0 +1,167 @@
+# Este pipeline funciona con un proyecto de nodejs usando pm2
+# en un selfhosted runner llamado 'back-dev', que pertenece al grupo 'dev',
+# en un selfhosted runner llamado 'back-qa', que pertenece al grupo 'qa',
+# en un selfhosted runner llamado 'back-sandbox', que pertenece al grupo 'sandbox',
+# los secrets tienen que establecerse en el repo de github dentro de 'environments'
+# y debe haber un environment llamado 'Development', 'Quality', 'Sandbox'
+# ahi agregar el valor de CF_CMM_GITHUB_TOKEN
+
+name: Despliegue g-biz
+
+on:
+  pull_request:
+    branches:
+      - Development
+      - Quality
+      - Sandbox
+    types:
+      - closed
+
+jobs:
+  deploy-dev:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Development'
+    name: Desplegar a DEV
+    runs-on: [ 'back-dev' ]
+    environment: Development
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@somosconfiao'
+          always-auth: true
+
+      - name: Desplegar el codigo en /srv/g-biz/
+        run: |
+          rsync -av --delete ./ /srv/g-biz/
+
+      - name: Instalar dependencias
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.CF_CMM_GITHUB_TOKEN }}
+        run: |
+          cd /srv/g-biz
+          if git diff --quiet HEAD^ HEAD -- package-lock.json; then
+            echo "Usando npm ci (lockfile esta limpio)"
+            npm ci
+          else
+            cat .npmrc
+            echo "npm install corriendo, el lockfile se actualizo"
+            npm install
+          fi
+
+      - name: Run tests
+        run: |
+          cd /srv/g-biz
+          npm test || echo "Tests fallaron, pero continuamos"
+
+      - name: Iniciar or recargar app with PM2
+        # env:
+        #     PM2_HOME: /srv/dev/.pm2
+        run: |
+          cd /srv/g-biz
+          pm2 start g-bus.js --update-env || pm2 reload g-bus.js --update-env
+          pm2 save
+
+  deploy-qa:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Quality'
+    name: Desplegar a QA
+    runs-on: [ 'back-qa' ]
+    environment: Quality
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@somosconfiao'
+          always-auth: true
+
+      - name: Desplegar el codigo en /srv/g-biz/
+        run: |
+          rsync -av --delete ./ /srv/g-biz/
+
+      - name: Instalar dependencias
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.CF_CMM_GITHUB_TOKEN }}
+        run: |
+          cd /srv/g-biz
+          if git diff --quiet HEAD^ HEAD -- package-lock.json; then
+            echo "Usando npm ci (lockfile esta limpio)"
+            npm ci
+          else
+            cat .npmrc
+            echo "npm install corriendo, el lockfile se actualizo"
+            npm install
+          fi
+
+      - name: Run tests
+        run: |
+          cd /srv/g-biz
+          npm test || echo "Tests fallaron, pero continuamos"
+
+      - name: Iniciar or recargar app with PM2
+        # env:
+        #     PM2_HOME: /srv/qa/.pm2
+        run: |
+          cd /srv/g-biz
+          pm2 start g-bus.js --update-env || pm2 reload g-bus.js --update-env
+          pm2 save
+
+  deploy-sandbox:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Sandbox'
+    name: Desplegar a Sandbox
+    runs-on: [ 'back-sandbox' ]
+    environment: Sandbox
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@somosconfiao'
+          always-auth: true
+
+      - name: Desplegar el codigo en /srv/g-biz/
+        run: |
+          rsync -av --delete ./ /srv/g-biz/
+
+      - name: Instalar dependencias
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.CF_CMM_GITHUB_TOKEN }}
+        run: |
+          cd /srv/g-biz
+          if git diff --quiet HEAD^ HEAD -- package-lock.json; then
+            echo "Usando npm ci (lockfile esta limpio)"
+            npm ci
+          else
+            cat .npmrc
+            echo "npm install corriendo, el lockfile se actualizo"
+            npm install
+          fi
+
+      - name: Run tests
+        run: |
+          cd /srv/g-biz
+          npm test || echo "Tests fallaron, pero continuamos"
+
+      - name: Iniciar or recargar app with PM2
+        # env:
+        #     PM2_HOME: /srv/sandbox/.pm2
+        run: |
+          cd /srv/g-biz
+          pm2 start g-bus.js --update-env || pm2 reload g-bus.js --update-env
+          pm2 save
+

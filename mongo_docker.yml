@@ -1,0 +1,134 @@
+# este pipeline despliega mongodb con docker
+# se ejecuta en un self-hosted runner llamado (db-dev, db-qa, db-sandbox)
+# esta separado por environments llamados Development, Quality, Sandbox
+# tiene 3 secrets que son (MONGO_INITDB_ROOT_USERNAME, MONGO_INITDB_ROOT_PASSWORD, MONGO_AUTH_DATABASE)
+# 
+name: Desplegar MongoDB al hacer merge de un PR
+
+on:
+  pull_request:
+    branches:
+      - Development
+      - Quality
+      - Sandbox
+    types:
+      - closed
+
+jobs:
+  deploy-dev:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Development'
+    runs-on: [ 'db-dev' ]
+    environment: Development
+    name: Deploy to Dev
+
+    env:
+      MONGO_INITDB_ROOT_USERNAME: ${{ secrets.MONGO_INITDB_ROOT_USERNAME }}
+      MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.MONGO_INITDB_ROOT_PASSWORD}}
+      MONGO_AUTH_DATABASE: ${{ secrets.MONGO_AUTH_DATABASE}}
+      ENVIRONMENT: dev
+      DB_PORT: 27030
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}" > .env
+          echo "MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}" >> .env
+          echo "MONGO_AUTH_DATABASE=${MONGO_AUTH_DATABASE}" >> .env
+          echo "ENVIRONMENT=${ENVIRONMENT}" >> .env
+          echo "DB_PORT=${DB_PORT}" >> .env
+          cat .env
+
+      - name: Parar y borrar los conenedores existentes
+        run: |
+          CONTAINER_NAME=mongo_db_${ENVIRONMENT}
+
+          if docker ps -a --format '{{.Names}}' | grep -q "^$CONTAINER_NAME$"; then
+            echo "Contenedor $CONTAINER_NAME encontrado. Eliminando..."
+            docker stop $CONTAINER_NAME
+            docker rm $CONTAINER_NAME
+          else
+            echo "No existe un contenedor llamado $CONTAINER_NAME. Continuando..."
+          fi 
+
+      - name: Desplegar la nueva version con docker compose
+        run: |
+          docker compose -p "mongo_${ENVIRONMENT}" up  -d --build --remove-orphans
+
+  deploy-qa:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Quality'
+    runs-on: [ 'db-qa' ]
+    environment: Quality
+    name: Deploy to QA
+
+    env:
+      MONGO_INITDB_ROOT_USERNAME: ${{ secrets.MONGO_INITDB_ROOT_USERNAME }}
+      MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.MONGO_INITDB_ROOT_PASSWORD}}
+      MONGO_AUTH_DATABASE: ${{ secrets.MONGO_AUTH_DATABASE}}
+      ENVIRONMENT: qa
+      DB_PORT: 27031
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}" > .env
+          echo "MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}" >> .env
+          echo "MONGO_AUTH_DATABASE=${MONGO_AUTH_DATABASE}" >> .env
+          echo "ENVIRONMENT=${ENVIRONMENT}" >> .env
+          echo "DB_PORT=${DB_PORT}" >> .env
+          cat .env
+
+      - name: Parar y borrar los conenedores existentes
+        run: |
+          CONTAINER_NAME=mongo_db_${ENVIRONMENT}
+
+          if docker ps -a --format '{{.Names}}' | grep -q "^$CONTAINER_NAME$"; then
+            echo "Contenedor $CONTAINER_NAME encontrado. Eliminando..."
+            docker stop $CONTAINER_NAME
+            docker rm $CONTAINER_NAME
+          else
+            echo "No existe un contenedor llamado $CONTAINER_NAME. Continuando..."
+          fi 
+
+      - name: Desplegar la nueva version con docker compose
+        run: |
+          docker compose -p "mongo_${ENVIRONMENT}" up  -d --build --remove-orphans
+
+  deploy-sandbox:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Sandbox'
+    runs-on: [ 'db-sandbox' ]
+    environment: Sandbox
+    name: Deploy to Sandbox
+
+    env:
+      MONGO_INITDB_ROOT_USERNAME: ${{ secrets.MONGO_INITDB_ROOT_USERNAME }}
+      MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.MONGO_INITDB_ROOT_PASSWORD}}
+      MONGO_AUTH_DATABASE: ${{ secrets.MONGO_AUTH_DATABASE}}
+      ENVIRONMENT: sandbox
+      DB_PORT: 27032
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}" > .env
+          echo "MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}" >> .env
+          echo "MONGO_AUTH_DATABASE=${MONGO_AUTH_DATABASE}" >> .env
+          echo "ENVIRONMENT=${ENVIRONMENT}" >> .env
+          echo "DB_PORT=${DB_PORT}" >> .env
+          cat .env
+
+      - name: Parar y borrar los conenedores existentes
+        run: |
+          CONTAINER_NAME=mongo_db_${ENVIRONMENT}
+
+          if docker ps -a --format '{{.Names}}' | grep -q "^$CONTAINER_NAME$"; then
+            echo "Contenedor $CONTAINER_NAME encontrado. Eliminando..."
+            docker stop $CONTAINER_NAME
+            docker rm $CONTAINER_NAME
+          else
+            echo "No existe un contenedor llamado $CONTAINER_NAME. Continuando..."
+          fi 
+
+      - name: Desplegar la nueva version con docker compose
+        run: |
+          docker compose -p "mongo_${ENVIRONMENT}" up  -d --build --remove-orphans
+

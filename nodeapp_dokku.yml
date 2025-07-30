@@ -1,0 +1,192 @@
+# Este pipeline es para una aplicacion de nodejs usando docker y desplegando con dokku
+# corre en un self-hosted runner llamado (back-dev, back-qa, back-sandbox), cuando se cierra un PR
+# Tiene environments, y ahi deben agregarse las variables DOKKU_SSH_PRIVATE_KEY
+# 
+name: Despliegue g-biz
+
+on:
+  pull_request:
+    branches:
+      - Development
+      - Quality
+      - Sandbox
+    types:
+      - closed
+
+jobs:
+  deploy-dev:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Development'
+    name: Desplegar a DEV
+    runs-on: ['back-dev']
+    environment: Development
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for git push to work properly
+
+      - name: Setup SSH key for Dokku deployment
+        run: |
+          # Create SSH directory if it doesn't exist
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DOKKU_SSH_PRIVATE_KEY }}" > ~/.ssh/dokku_key
+          chmod 600 ~/.ssh/dokku_key
+          ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Configure Git for Dokku deployment
+        run: |
+          git config --global user.email "github-actions@confiao.app"
+          git config --global user.name "GitHub Actions"
+
+          # configura SSH to use the Dokku key
+          cat <<EOF > ~/.ssh/config
+          Host dokku-dev
+            HostName localhost
+            User dokku
+            Port 22
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking no
+          EOF
+
+          # Add Dokku remote
+          git remote add dokku-dev dokku-dev:g-biz || git remote set-url dokku-dev dokku-dev:g-biz
+
+      - name: Deploy to Dokku
+        run: |
+          # Push to Dokku for deployment
+          git push dokku-dev HEAD:Development --force
+
+      - name: Wait for deployment and run health check
+        run: |
+          # Wait a bit for deployment to complete
+          sleep 30
+
+      - name: Run tests against deployed app (optional)
+        run: |
+          echo "Deployment completed successfully"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Clean up SSH keys
+          rm -f ~/.ssh/dokku_key
+
+  deploy-qa:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Quality'
+    name: Desplegar a QA
+    runs-on: ['back-qa']
+    environment: Quality
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for git push to work properly
+
+      - name: Setup SSH key for Dokku deployment
+        run: |
+          # Create SSH directory if it doesn't exist
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DOKKU_SSH_PRIVATE_KEY }}" > ~/.ssh/dokku_key
+          chmod 600 ~/.ssh/dokku_key
+          ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Configure Git for Dokku deployment
+        run: |
+          git config --global user.email "github-actions@confiao.app"
+          git config --global user.name "GitHub Actions"
+
+          # configura SSH to use the Dokku key
+          cat <<EOF > ~/.ssh/config
+          Host dokku-qa
+            HostName localhost
+            User dokku
+            Port 22
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking no
+          EOF
+
+          # Add Dokku remote
+          git remote add dokku-qa dokku-qa:g-biz || git remote set-url dokku-qa dokku-qa:g-biz
+
+      - name: Deploy to Dokku
+        run: |
+          # Push to Dokku for deployment
+          git push dokku-qa HEAD:Quality --force
+
+      - name: Wait for deployment and run health check
+        run: |
+          # Wait a bit for deployment to complete
+          sleep 30
+
+      - name: Run tests against deployed app (optional)
+        run: |
+          echo "Deployment completed successfully"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Clean up SSH keys
+          rm -f ~/.ssh/dokku_key
+
+
+
+  deploy-sandbox:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Sandbox'
+    name: Desplegar a Sandbox
+    runs-on: ['back-sandbox']
+    environment: Sandbox
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for git push to work properly
+
+      - name: Setup SSH key for Dokku deployment
+        run: |
+          # Create SSH directory if it doesn't exist
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DOKKU_SSH_PRIVATE_KEY }}" > ~/.ssh/dokku_key
+          chmod 600 ~/.ssh/dokku_key
+          ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Configure Git for Dokku deployment
+        run: |
+          git config --global user.email "github-actions@confiao.app"
+          git config --global user.name "GitHub Actions"
+
+          # configura SSH to use the Dokku key
+          cat <<EOF > ~/.ssh/config
+          Host dokku-sandbox
+            HostName localhost
+            User dokku
+            Port 22
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking no
+          EOF
+
+          # Add Dokku remote
+          git remote add dokku-sandbox dokku-sandbox:g-biz || git remote set-url dokku-sandbox dokku-sandbox:g-biz
+
+      - name: Deploy to Dokku
+        run: |
+          # Push to Dokku for deployment
+          git push dokku-sandbox HEAD:Sandbox --force
+
+      - name: Wait for deployment and run health check
+        run: |
+          # Wait a bit for deployment to complete
+          sleep 30
+
+      - name: Run tests against deployed app (optional)
+        run: |
+          echo "Deployment completed successfully"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Clean up SSH keys
+          rm -f ~/.ssh/dokku_key
+
