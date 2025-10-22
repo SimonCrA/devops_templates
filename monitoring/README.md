@@ -83,6 +83,7 @@ Not indexed: "Error: Database connection failed"  ← Searched on-demand
 ## 4. **Diagrama visual**
 
 
+```
 ┌─────────────────────────────────────────┐
 │  Your VM                                │
 │                                         │
@@ -138,7 +139,7 @@ Not indexed: "Error: Database connection failed"  ← Searched on-demand
       │ Browser │
       │  (You)  │
       └─────────┘
-
+```
 
 
 ## 5. **Permisos de las carpetas**
