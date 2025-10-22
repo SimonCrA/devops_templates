@@ -1,0 +1,235 @@
+name: Construir la aplicacion de Angular, en un servidor local
+
+on:
+  pull_request:
+    branches:
+      - Development
+      - Quality
+      - Sandbox
+    types:
+      - closed
+
+jobs:
+  deploy-dev:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Development'
+    name: Desplegar a DEV
+    runs-on: [ 'front-dev' ]
+    environment: Development
+
+    steps:
+      - name: Configurar SSH del submodulo
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SUBMODULE_SSH_KEY }}" > ~/.ssh/id_submodule
+          chmod 600 ~/.ssh/id_submodule
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+          # Configure SSH to use specific key for GitHub
+          # esto se utilizar luego para hacer checkout del codigo
+          cat >> ~/.ssh/config << EOF
+          Host github.com
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/id_submodule
+            IdentitiesOnly yes
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Sincronizar el codigo (checkout)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.SUBMODULE_SSH_KEY }}
+          fetch-depth: 0
+
+      # - name: Desplegar a dokku
+      #   uses: dokku/github-action@master
+      #   with:
+      #     ssh_private_key: ${{ secrets.DOKKU_SSH_PRIVATE_KEY }}
+      #     git_remote_url: "ssh://dokku@${{ secrets.DOKKU_HOST }}/f-bus"
+      #     git_push_flags: "--force"
+      #     branch: "Development"
+      #     command: "deploy"
+      - name: Configurar SSH de la llave principal para Dokku
+        run: |
+          rm -f ~/.ssh/dokku_key
+
+          # Add Dokku SSH key
+          echo "${{ secrets.DOKKU_SSH_PRIVATE_KEY }}" > ~/.ssh/dokku_key
+          chmod 600 ~/.ssh/dokku_key
+          ssh-keyscan -t ed25519,rsa ${{ secrets.DOKKU_HOST }} >> ~/.ssh/known_hosts
+
+          chmod 644 ~/.ssh/known_hosts
+
+          # esto agrega la llave privada para que se pueda hacer push a dokku
+          cat > ~/.ssh/config << 'EOF'
+          Host dokku-deploy
+            HostName ${{ secrets.DOKKU_HOST }}
+            User dokku
+            IdentityFile ~/.ssh/dokku_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+          EOF
+          chmod 600 ~/.ssh/config
+
+          # es necesario que se establezca dentro del servidor de dokku la llave privada
+          # del submodulo porque sino no funcionara este comando cuando intenta sincronizar
+          # ssh <user>@<dokku server>
+          # sudo su - dokku
+          # cat "llave privada" | nano id_ed25519
+          # chmod 600 ~/.ssh/id_ed25519
+          # nssh-keyscan github.com >> ~/.ssh/known_hosts
+
+          git remote add dokku ssh://dokku-deploy/f-bus 2>/dev/null || git remote set-url dokku ssh://dokku-deploy/f-bus
+          git push dokku HEAD:Development --force
+
+          # Cleanup
+          rm -f ~/.ssh/dokku_key
+  deploy-QA:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Quality'
+    name: Desplegar a QA
+    runs-on: [ 'front-qa' ]
+    environment: Quality
+
+    steps:
+      - name: Configurar SSH del submodulo
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SUBMODULE_SSH_KEY }}" > ~/.ssh/id_submodule
+          chmod 600 ~/.ssh/id_submodule
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+          # Configure SSH to use specific key for GitHub
+          # esto se utilizar luego para hacer checkout del codigo
+          cat >> ~/.ssh/config << EOF
+          Host github.com
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/id_submodule
+            IdentitiesOnly yes
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Sincronizar el codigo (checkout)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.SUBMODULE_SSH_KEY }}
+          fetch-depth: 0
+
+      # - name: Desplegar a dokku
+      #   uses: dokku/github-action@master
+      #   with:
+      #     ssh_private_key: ${{ secrets.DOKKU_SSH_PRIVATE_KEY }}
+      #     git_remote_url: "ssh://dokku@${{ secrets.DOKKU_HOST }}/f-bus"
+      #     git_push_flags: "--force"
+      #     branch: "Development"
+      #     command: "deploy"
+      - name: Configurar SSH de la llave principal para Dokku
+        run: |
+          rm -f ~/.ssh/dokku_key
+
+          # Add Dokku SSH key
+          echo "${{ secrets.DOKKU_SSH_PRIVATE_KEY }}" > ~/.ssh/dokku_key
+          chmod 600 ~/.ssh/dokku_key
+          ssh-keyscan -t ed25519,rsa ${{ secrets.DOKKU_HOST }} >> ~/.ssh/known_hosts
+
+          chmod 644 ~/.ssh/known_hosts
+
+          # esto agrega la llave privada para que se pueda hacer push a dokku
+          cat > ~/.ssh/config << 'EOF'
+          Host dokku-deploy
+            HostName ${{ secrets.DOKKU_HOST }}
+            User dokku
+            IdentityFile ~/.ssh/dokku_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+          EOF
+          chmod 600 ~/.ssh/config
+
+          # es necesario que se establezca dentro del servidor de dokku la llave privada
+          # del submodulo porque sino no funcionara este comando cuando intenta sincronizar
+          # ssh <user>@<dokku server>
+          # sudo su - dokku
+          # cat "llave privada" | nano id_ed25519
+          # chmod 600 ~/.ssh/id_ed25519
+          # nssh-keyscan github.com >> ~/.ssh/known_hosts
+          git remote add dokku ssh://dokku-deploy/f-bus 2>/dev/null || git remote set-url dokku ssh://dokku-deploy/f-bus
+          git push dokku HEAD:Quality --force
+
+          # Cleanup
+          rm -f ~/.ssh/dokku_key
+  deploy-Sandbox:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Sandbox'
+    name: Desplegar a Sandbox
+    runs-on: [ 'front-sandbox' ]
+    environment: Sandbox
+
+    steps:
+      - name: Configurar SSH del submodulo
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SUBMODULE_SSH_KEY }}" > ~/.ssh/id_submodule
+          chmod 600 ~/.ssh/id_submodule
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+          # Configure SSH to use specific key for GitHub
+          # esto se utilizar luego para hacer checkout del codigo
+          cat >> ~/.ssh/config << EOF
+          Host github.com
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/id_submodule
+            IdentitiesOnly yes
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Sincronizar el codigo (checkout)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.SUBMODULE_SSH_KEY }}
+          fetch-depth: 0
+
+      # - name: Desplegar a dokku
+      #   uses: dokku/github-action@master
+      #   with:
+      #     ssh_private_key: ${{ secrets.DOKKU_SSH_PRIVATE_KEY }}
+      #     git_remote_url: "ssh://dokku@${{ secrets.DOKKU_HOST }}/f-bus"
+      #     git_push_flags: "--force"
+      #     branch: "Development"
+      #     command: "deploy"
+      - name: Configurar SSH de la llave principal para Dokku
+        run: |
+          rm -f ~/.ssh/dokku_key
+
+          # Add Dokku SSH key
+          echo "${{ secrets.DOKKU_SSH_PRIVATE_KEY }}" > ~/.ssh/dokku_key
+          chmod 600 ~/.ssh/dokku_key
+          ssh-keyscan -t ed25519,rsa ${{ secrets.DOKKU_HOST }} >> ~/.ssh/known_hosts
+
+          chmod 644 ~/.ssh/known_hosts
+
+          # esto agrega la llave privada para que se pueda hacer push a dokku
+          cat > ~/.ssh/config << 'EOF'
+          Host dokku-deploy
+            HostName ${{ secrets.DOKKU_HOST }}
+            User dokku
+            IdentityFile ~/.ssh/dokku_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+          EOF
+          chmod 600 ~/.ssh/config
+
+          # es necesario que se establezca dentro del servidor de dokku la llave privada
+          # del submodulo porque sino no funcionara este comando cuando intenta sincronizar
+          # ssh <user>@<dokku server>
+          # sudo su - dokku
+          # cat "llave privada" | nano id_ed25519
+          # chmod 600 ~/.ssh/id_ed25519
+          # nssh-keyscan github.com >> ~/.ssh/known_hosts
+          git remote add dokku ssh://dokku-deploy/f-bus 2>/dev/null || git remote set-url dokku ssh://dokku-deploy/f-bus
+          git push dokku HEAD:Sandbox --force
+
+          # Cleanup
+          rm -f ~/.ssh/dokku_key

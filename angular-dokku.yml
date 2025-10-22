@@ -1,0 +1,72 @@
+name: Construir la aplicacion de Angular, en un servidor local
+
+on:
+  pull_request:
+    branches:
+      - Development
+      - Quality
+      - Sandbox
+    types:
+      - closed
+
+jobs:
+  deploy-dev:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Development'
+    name: Desplegar a DEV
+    runs-on: [ 'front-dev' ]
+    environment: Development
+
+    steps:
+      - name: Sincronizar el codigo (checkout)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Desplegar a dokku
+        uses: dokku/github-action@master
+        with:
+          ssh_private_key: ${{ secrets.DOKKU_SSH_PRIVATE_KEY }}
+          git_remote_url: "ssh://dokku@${{ secrets.DOKKU_HOST }}/f-bo"
+          git_push_flags: "--force"
+          branch: "Development"
+          command: "deploy"
+  deploy-qa:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Quality'
+    name: Desplegar a QA
+    runs-on: [ 'front-qa' ]
+    environment: Quality
+
+    steps:
+      - name: Sincronizar el codigo (checkout)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Desplegar a dokku
+        uses: dokku/github-action@master
+        with:
+          ssh_private_key: ${{ secrets.DOKKU_SSH_PRIVATE_KEY }}
+          git_remote_url: "ssh://dokku@${{ secrets.DOKKU_HOST }}/f-bo"
+          git_push_flags: "--force"
+          branch: "Quality"
+          command: "deploy"
+  deploy-sandbox:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'Sandbox'
+    name: Desplegar a Sandbox
+    runs-on: [ 'front-sandbox' ]
+    environment: Sandbox
+
+    steps:
+      - name: Sincronizar el codigo (checkout)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Desplegar a dokku
+        uses: dokku/github-action@master
+        with:
+          ssh_private_key: ${{ secrets.DOKKU_SSH_PRIVATE_KEY }}
+          git_remote_url: "ssh://dokku@${{ secrets.DOKKU_HOST }}/f-bo"
+          git_push_flags: "--force"
+          branch: "Sandbox"
+          command: "deploy"
