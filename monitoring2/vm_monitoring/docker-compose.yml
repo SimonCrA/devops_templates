@@ -1,0 +1,53 @@
+services:
+  loki:
+    image: grafana/loki:2.9.3
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-data:/loki
+      - ./configs/loki-config.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-remote-write-receiver'
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: grafana
+    ports:
+      - "3101:3000"
+    volumes:
+      - ./grafana-data:/var/lib/grafana
+      - ./configs/grafana-provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://10.20.10.18:3101
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge
+

@@ -1,0 +1,103 @@
+
+// Discover Docker containers
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Scrape Docker logs
+loki.source.docker "docker_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.containers.targets
+  forward_to = [loki.process.add_labels.receiver]
+}
+
+// Add custom labels to logs
+loki.process "add_labels" {
+  forward_to = [loki.write.remote.receiver]
+
+  stage.docker {}
+
+  // Add environment label
+  stage.static_labels {
+    values = {
+      environment = "development",  // cambiar esto por entorno: dev, qa, sandbox
+      vm_type     = "database",  // Cambiar en cada VM: database, backend, frontend
+      hostname    = env("HOSTNAME"),
+    }
+  }
+
+  // Extract Dokku app name
+  stage.label_drop {
+    values = ["filename"]
+  }
+}
+
+// Write logs to central Loki
+loki.write "remote" {
+  endpoint {
+    url = "http://10.20.10.18:3100/loki/api/v1/push" // VM visualizer
+
+    // Optional: añadir autenticación
+    // basic_auth {
+    //   username = "your-username"
+    //   password = "your-password"
+    // }
+  }
+}
+
+
+// ============================================
+// Configuration de metricas (reemplaza Node Exporter + cAdvisor)
+// ============================================
+
+// Collect system metrics (Node Exporter equivalent)
+prometheus.exporter.unix "system" {
+  // Collect all default system metrics
+}
+
+// Collect Docker/container metrics (cAdvisor equivalent)
+discovery.docker "containers_metrics" {
+  host = "unix:///var/run/docker.sock"
+}
+
+prometheus.exporter.cadvisor "containers" {
+  docker_host = "unix:///var/run/docker.sock"
+}
+
+prometheus.scrape "container_metrics" {
+  targets    = prometheus.exporter.cadvisor.containers.targets
+  forward_to = [prometheus.relabel.add_labels.receiver]
+}
+
+// Añadir etiquetas (labels) personalizados a las metricas
+prometheus.relabel "add_labels" {
+  forward_to = [prometheus.remote_write.remote.receiver]
+
+  rule {
+    target_label = "environment"
+    replacement  = "dev"  // Cambiar por entorno
+  }
+
+  rule {
+    target_label = "vm_type"
+    replacement  = "database"  // Cambiar por VM
+  }
+
+  rule {
+    target_label = "instance"
+    replacement  = env("HOSTNAME")
+  }
+}
+
+// Escribir las metricas al prometheus central
+prometheus.remote_write "remote" {
+  endpoint {
+    url = "http://10.20.10.18:9090/api/v1/write"
+
+    // Optional: Add authentication
+    // basic_auth {
+    //   username = "your-username"
+    //   password = "your-password"
+    // }
+  }
+}

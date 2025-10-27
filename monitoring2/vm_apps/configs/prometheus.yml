@@ -1,0 +1,40 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'central-monitoring'
+
+# Enable remote write receiver
+# This allows Alloy to push metrics to Prometheus
+# You need to add this flag when starting Prometheus under command:
+# - '--web.enable-remote-write-receiver' 
+
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Optional: Scrape Alloy's own metrics (for monitoring the agent)
+  - job_name: 'alloy-agents'
+    static_configs:
+      - targets: 
+          - '10.20.10.10:12345' # Database
+          - '10.20.10.11:12345' # Backend
+          - '10.20.10.12:12345' # Frontend
+        labels:
+          environment: 'dev'
+      
+      - targets:
+          - '10.20.20.10:12345' # Database
+          - '10.20.20.11:12345' # Backend
+          - '10.20.20.12:12345' # Frontend
+        labels:
+          environment: 'qa'
+      
+      - targets:
+          - '10.20.30.10:12345' # Database
+          - '10.20.30.11:12345' # Backend
+          - '10.20.30.12:12345' # Frontend
+        labels:
+          environment: 'sandbox'
