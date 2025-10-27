@@ -1,103 +1,116 @@
+// ============================================
+// Logging Configuration
+// ============================================
 
-// Discover Docker containers
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
 }
 
-// Scrape Docker logs
 loki.source.docker "docker_logs" {
   host       = "unix:///var/run/docker.sock"
   targets    = discovery.docker.containers.targets
   forward_to = [loki.process.add_labels.receiver]
+  refresh_interval = "5s"
 }
 
-// Add custom labels to logs
 loki.process "add_labels" {
   forward_to = [loki.write.remote.receiver]
 
   stage.docker {}
 
-  // Add environment label
   stage.static_labels {
     values = {
-      environment = "development",  // cambiar esto por entorno: dev, qa, sandbox
-      vm_type     = "database",  // Cambiar en cada VM: database, backend, frontend
-      hostname    = env("HOSTNAME"),
+      environment = "dev",          // CHANGE THIS: dev, qa, sandbox
+      vm_type     = "database",     // CHANGE THIS: database, backend, frontend
+      vm_ip       = "10.20.10.10",  // CHANGE THIS: actual VM IP
     }
   }
-
-  // Extract Dokku app name
-  stage.label_drop {
-    values = ["filename"]
-  }
 }
 
-// Write logs to central Loki
 loki.write "remote" {
   endpoint {
-    url = "http://10.20.10.18:3100/loki/api/v1/push" // VM visualizer
-
-    // Optional: añadir autenticación
-    // basic_auth {
-    //   username = "your-username"
-    //   password = "your-password"
-    // }
+    url = "http://10.20.10.18:3100/loki/api/v1/push"  // CHANGE THIS: your monitoring VM IP
   }
 }
 
-
 // ============================================
-// Configuration de metricas (reemplaza Node Exporter + cAdvisor)
+// System Metrics Configuration
 // ============================================
 
-// Collect system metrics (Node Exporter equivalent)
 prometheus.exporter.unix "system" {
-  // Collect all default system metrics
+  set_collectors = ["cpu", "meminfo", "diskstats", "filesystem", "loadavg", "netdev"]
 }
 
-// Collect Docker/container metrics (cAdvisor equivalent)
-discovery.docker "containers_metrics" {
-  host = "unix:///var/run/docker.sock"
+prometheus.scrape "system_metrics" {
+  targets = prometheus.exporter.unix.system.targets
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  scrape_interval = "15s"
+  
+  job_name = "system"
 }
+
+// ============================================
+// Container Metrics Configuration  
+// ============================================
 
 prometheus.exporter.cadvisor "containers" {
   docker_host = "unix:///var/run/docker.sock"
+  store_container_labels = true
 }
 
 prometheus.scrape "container_metrics" {
-  targets    = prometheus.exporter.cadvisor.containers.targets
+  targets = prometheus.exporter.cadvisor.containers.targets
   forward_to = [prometheus.relabel.add_labels.receiver]
+  scrape_interval = "15s"
+  
+  job_name = "cadvisor"
 }
 
-// Añadir etiquetas (labels) personalizados a las metricas
+// ============================================
+// Add External Labels to All Metrics
+// ============================================
+
 prometheus.relabel "add_labels" {
   forward_to = [prometheus.remote_write.remote.receiver]
 
   rule {
+    action = "replace"
     target_label = "environment"
-    replacement  = "dev"  // Cambiar por entorno
+    replacement = "dev"  // CHANGE THIS: dev, qa, sandbox
   }
 
   rule {
+    action = "replace"
     target_label = "vm_type"
-    replacement  = "database"  // Cambiar por VM
+    replacement = "database"  // CHANGE THIS: database, backend, frontend
   }
 
   rule {
+    action = "replace"
     target_label = "instance"
-    replacement  = env("HOSTNAME")
+    replacement = "dev-db-10.20.10.10"  // CHANGE THIS: descriptive instance name
   }
 }
 
-// Escribir las metricas al prometheus central
+// ============================================
+// Remote Write to Prometheus
+// ============================================
+
 prometheus.remote_write "remote" {
   endpoint {
-    url = "http://10.20.10.18:9090/api/v1/write"
-
-    // Optional: Add authentication
-    // basic_auth {
-    //   username = "your-username"
-    //   password = "your-password"
-    // }
+    url = "http://10.20.10.18:9090/api/v1/write"  // CHANGE THIS: your monitoring VM IP
+    
+    queue_config {
+      capacity = 10000
+      max_shards = 10
+      batch_send_deadline = "5s"
+    }
+  }
+  
+  external_labels = {
+    environment = "dev",          // CHANGE THIS: dev, qa, sandbox
+    vm_type = "database",         // CHANGE THIS: database, backend, frontend
+    instance = "dev-db-10.20.10.10",  // CHANGE THIS: descriptive instance name
   }
 }
