@@ -1,43 +1,64 @@
-// ============================================
-// Logging Configuration
-// ============================================
-
+// 1. Discover Docker containers and apply Dokku relabeling logic
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
   refresh_interval = "5s"
 }
 
-loki.source.docker "docker_logs" {
-  host       = "unix:///var/run/docker.sock"
-  targets    = discovery.docker.containers.targets
-  forward_to = [loki.process.add_labels.receiver]
-  refresh_interval = "5s"
+discovery.relabel "dokku_containers" {
+  targets = discovery.docker.containers.targets
+
+  // Extract Dokku app name
+  rule {
+    source_labels = ["__meta_docker_container_label_com_dokku_app_name"]
+    target_label  = "app"
+  }
+
+  // Extract container name (removing the leading slash)
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // Extract process type (web, worker, etc.)
+  rule {
+    source_labels = ["__meta_docker_container_label_com_dokku_process_type"]
+    target_label  = "process_type"
+  }
 }
 
+// 2. Use the relabeled targets as the source for logs
+loki.source.docker "docker_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.dokku_containers.output
+  forward_to = [loki.process.add_labels.receiver]
+}
+
+// 3. Process logs and add static/dynamic labels
 loki.process "add_labels" {
   forward_to = [loki.write.remote.receiver]
 
+  // This automatically picks up 'stream' and other docker-specific attributes
   stage.docker {}
 
   stage.static_labels {
     values = {
-      environment = "dev",          // CHANGE THIS: dev, qa, sandbox
-      vm_type     = "database",     // CHANGE THIS: database, backend, frontend
-      vm_ip       = "10.20.10.10",  // CHANGE THIS: actual VM IP
+      environment = "dev",
+      vm_type     = "backend",
+      vm_ip       = "10.20.10.11",
     }
   }
 }
 
 loki.write "remote" {
   endpoint {
-    url = "http://10.20.10.18:3100/loki/api/v1/push"  // CHANGE THIS: your monitoring VM IP
+    url = "http://10.20.10.18:3100/loki/api/v1/push"
   }
 }
 
 // ============================================
 // System Metrics Configuration
 // ============================================
-
 prometheus.exporter.unix "system" {
   set_collectors = ["cpu", "meminfo", "diskstats", "filesystem", "loadavg", "netdev"]
 }
@@ -46,14 +67,11 @@ prometheus.scrape "system_metrics" {
   targets = prometheus.exporter.unix.system.targets
   forward_to = [prometheus.relabel.add_labels.receiver]
   scrape_interval = "15s"
-  
-  job_name = "system"
 }
 
 // ============================================
-// Container Metrics Configuration  
+// Container Metrics Configuration
 // ============================================
-
 prometheus.exporter.cadvisor "containers" {
   docker_host = "unix:///var/run/docker.sock"
   store_container_labels = true
@@ -63,54 +81,50 @@ prometheus.scrape "container_metrics" {
   targets = prometheus.exporter.cadvisor.containers.targets
   forward_to = [prometheus.relabel.add_labels.receiver]
   scrape_interval = "15s"
-  
-  job_name = "cadvisor"
 }
 
 // ============================================
 // Add External Labels to All Metrics
 // ============================================
-
 prometheus.relabel "add_labels" {
   forward_to = [prometheus.remote_write.remote.receiver]
 
   rule {
     action = "replace"
     target_label = "environment"
-    replacement = "dev"  // CHANGE THIS: dev, qa, sandbox
+    replacement = "dev"
   }
 
   rule {
     action = "replace"
     target_label = "vm_type"
-    replacement = "database"  // CHANGE THIS: database, backend, frontend
+    replacement = "backend"
   }
 
   rule {
     action = "replace"
     target_label = "instance"
-    replacement = "dev-db-10.20.10.10"  // CHANGE THIS: descriptive instance name
+    replacement = "dev-back-10.20.10.11"
   }
 }
 
 // ============================================
 // Remote Write to Prometheus
 // ============================================
-
 prometheus.remote_write "remote" {
   endpoint {
-    url = "http://10.20.10.18:9090/api/v1/write"  // CHANGE THIS: your monitoring VM IP
-    
+    url = "http://10.20.10.18:9090/api/v1/write"
+
     queue_config {
       capacity = 10000
       max_shards = 10
       batch_send_deadline = "5s"
     }
   }
-  
+
   external_labels = {
-    environment = "dev",          // CHANGE THIS: dev, qa, sandbox
-    vm_type = "database",         // CHANGE THIS: database, backend, frontend
-    instance = "dev-db-10.20.10.10",  // CHANGE THIS: descriptive instance name
+    environment = "dev",
+    vm_type = "backend",
+    instance = "dev-back-10.20.10.11",
   }
 }
